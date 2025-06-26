@@ -8,11 +8,12 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
+  test:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
+        go-version: ['1.24.4']
 
     steps:
     - name: Checkout code
@@ -21,20 +22,40 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v5
       with:
-        go-version: '1.24.4'
-    - name: Run Go Mod
-      run: go mod download github.com/google/go-github/v73
+        go-version: ${{ matrix.go-version }}
+        cache: true
+
+    - name: Update all Go dependencies
+      run: |
+        go get -u all
+        go mod tidy
+
+    - name: Verify dependencies
+      run: go mod verify
+
+    - name: Run tests
+      run: go test -v -race -coverprofile=coverage.out ./...
 
     - name: Run build
       run: |
-        echo "Running make build-all on ${{ matrix.os }}"
-        make build-all
+        echo "Running build on ${{ matrix.os }}"
+        go build -v -o github-profiler .
 
-    - name: Upload build artifacts
-      uses: actions/upload-artifact@v4
+    - name: Test binary (Unix)
+      if: runner.os != 'Windows'
+      run: |
+        ./github-profiler --help
+        echo "q" | ./github-profiler demo
+
+    - name: Test binary (Windows)
+      if: runner.os == 'Windows'
+      run: |
+        ./github-profiler.exe --help
+        echo "q" | ./github-profiler.exe demo
+
+    - name: Upload coverage reports
+      uses: codecov/codecov-action@v4
+      if: matrix.os == 'ubuntu-latest'
       with:
-        name: go-build-${{ matrix.os }}
-        path: build/
-
-    - name: Build completed
-      run: echo "Build and artifact upload completed on ${{ matrix.os }}"
+        file: ./coverage.out
+        fail_ci_if_error: false

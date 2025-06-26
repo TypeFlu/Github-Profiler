@@ -1,0 +1,233 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g., v1.0.0)'
+        required: true
+        type: string
+      prerelease:
+        description: 'Mark as pre-release'
+        required: false
+        type: boolean
+        default: false
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.24.4'
+        cache: true
+
+    - name: Update all Go dependencies
+      run: |
+        go get -u all
+        go mod tidy
+
+    - name: Run tests
+      run: go test -v -race ./...
+
+    - name: Run linter
+      uses: golangci/golangci-lint-action@v4
+      with:
+        version: latest
+
+  build:
+    needs: test
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            goos: linux
+            goarch: amd64
+            suffix: linux-amd64
+          - os: ubuntu-latest
+            goos: linux
+            goarch: arm64
+            suffix: linux-arm64
+          - os: macos-latest
+            goos: darwin
+            goarch: amd64
+            suffix: darwin-amd64
+          - os: macos-latest
+            goos: darwin
+            goarch: arm64
+            suffix: darwin-arm64
+          - os: windows-latest
+            goos: windows
+            goarch: amd64
+            suffix: windows-amd64.exe
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.24.4'
+        cache: true
+
+    - name: Update all Go dependencies
+      run: |
+        go get -u all
+        go mod tidy
+
+    - name: Get version
+      id: version
+      shell: bash
+      run: |
+        if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+          echo "VERSION=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+        else
+          echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Build binary
+      env:
+        GOOS: ${{ matrix.goos }}
+        GOARCH: ${{ matrix.goarch }}
+        CGO_ENABLED: 0
+      run: |
+        mkdir -p build
+        BINARY_NAME="github-profiler"
+        if [[ "${{ matrix.goos }}" == "windows" ]]; then
+          BINARY_NAME="${BINARY_NAME}.exe"
+        fi
+        
+        go build -v -ldflags="-s -w -X main.version=${{ steps.version.outputs.VERSION }}" \
+          -o "build/${BINARY_NAME}" .
+
+    - name: Create archive (Unix)
+      if: matrix.goos != 'windows'
+      run: |
+        cd build
+        tar -czf "github-profiler-${{ steps.version.outputs.VERSION }}-${{ matrix.suffix }}.tar.gz" github-profiler
+        sha256sum "github-profiler-${{ steps.version.outputs.VERSION }}-${{ matrix.suffix }}.tar.gz" > "github-profiler-${{ steps.version.outputs.VERSION }}-${{ matrix.suffix }}.tar.gz.sha256"
+
+    - name: Create archive (Windows)
+      if: matrix.goos == 'windows'
+      run: |
+        cd build
+        7z a "github-profiler-${{ steps.version.outputs.VERSION }}-${{ matrix.suffix }}.zip" github-profiler.exe
+        certutil -hashfile "github-profiler-${{ steps.version.outputs.VERSION }}-${{ matrix.suffix }}.zip" SHA256 > "github-profiler-${{ steps.version.outputs.VERSION }}-${{ matrix.suffix }}.zip.sha256"
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: github-profiler-${{ matrix.suffix }}
+        path: build/github-profiler-${{ steps.version.outputs.VERSION }}-*
+        retention-days: 5
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Get version
+      id: version
+      run: |
+        if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+          echo "VERSION=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+        else
+          echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: artifacts
+
+    - name: Prepare release assets
+      run: |
+        mkdir -p release-assets
+        find artifacts -name "*.tar.gz" -o -name "*.zip" -o -name "*.sha256" | xargs -I {} cp {} release-assets/
+        ls -la release-assets/
+
+    - name: Generate changelog
+      id: changelog
+      run: |
+        # Get commits since last tag
+        LAST_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+        if [[ -n "$LAST_TAG" ]]; then
+          CHANGELOG=$(git log --pretty=format:"- %s" $LAST_TAG..HEAD)
+        else
+          CHANGELOG=$(git log --pretty=format:"- %s" -10)
+        fi
+        
+        # Create changelog file
+        cat << EOF > CHANGELOG.md
+        ## What's Changed
+        
+        $CHANGELOG
+        
+        ## Installation
+        
+        ### Download Binary
+        Download the appropriate binary for your platform from the assets below.
+        
+        ### Install via Go
+        \`\`\`bash
+        go install github.com/Typeflu/Temp@${{ steps.version.outputs.VERSION }}
+        \`\`\`
+        
+        ### Verify Downloads
+        All binaries include SHA256 checksums for verification:
+        \`\`\`bash
+        sha256sum -c github-profiler-*.sha256
+        \`\`\`
+        
+        ## Usage
+        \`\`\`bash
+        # Interactive mode
+        github-profiler
+        
+        # Direct username
+        github-profiler octocat
+        
+        # Demo mode
+        github-profiler demo
+        \`\`\`
+        
+        **Full Changelog**: https://github.com/Typeflu/Temp/compare/$LAST_TAG...${{ steps.version.outputs.VERSION }}
+        EOF
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ steps.version.outputs.VERSION }}
+        name: GitHub Profiler ${{ steps.version.outputs.VERSION }}
+        body_path: CHANGELOG.md
+        files: release-assets/*
+        prerelease: ${{ github.event.inputs.prerelease || false }}
+        generate_release_notes: true
+        make_latest: ${{ !github.event.inputs.prerelease }}
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Update latest tag (if not prerelease)
+      if: ${{ !github.event.inputs.prerelease }}
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git tag -d latest || true
+        git push origin :refs/tags/latest || true
+        git tag latest
+        git push origin latest

@@ -57,6 +57,13 @@ deps:
 	@go mod download
 	@echo "$(GREEN)✓ Dependencies installed$(NC)"
 
+## Update all dependencies to latest versions
+deps-update:
+	@echo "$(BLUE)Updating all dependencies to latest versions...$(NC)"
+	@go get -u all
+	@go mod tidy
+	@echo "$(GREEN)✓ Dependencies updated$(NC)"
+
 ## Install the binary to system PATH
 install: build
 	@echo "$(BLUE)Installing $(BINARY_NAME) to /usr/local/bin...$(NC)"
@@ -128,6 +135,7 @@ help:
 	@echo "  $(GREEN)install$(NC)    - Install binary to system PATH"
 	@echo "  $(GREEN)uninstall$(NC)  - Remove binary from system PATH"
 	@echo "  $(GREEN)deps$(NC)       - Install Go dependencies"
+	@echo "  $(GREEN)deps-update$(NC) - Update all dependencies to latest versions"
 	@echo "  $(GREEN)test$(NC)       - Run tests"
 	@echo "  $(GREEN)lint$(NC)       - Run linter"
 	@echo "  $(GREEN)clean$(NC)      - Clean build artifacts"

@@ -33,3 +33,6 @@ Thumbs.db
 
 # Coverage
 coverage.out
+# build files
+*.sh
+
