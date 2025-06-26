@@ -22,6 +22,8 @@ jobs:
       uses: actions/setup-go@v5
       with:
         go-version: '1.24.4'
+    - name: Run Go Mod
+      run: go mod download github.com/google/go-github/v73
 
     - name: Run build
       run: |
