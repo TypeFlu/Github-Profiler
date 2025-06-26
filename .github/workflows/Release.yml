@@ -18,37 +18,10 @@ on:
 
 permissions:
   contents: write
-  packages: write
-  attestations: write
-  id-token: write
 
 jobs:
-  build:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        include:
-          - os: ubuntu-latest
-            goos: linux
-            goarch: amd64
-            suffix: linux-amd64
-          - os: ubuntu-latest
-            goos: linux
-            goarch: arm64  
-            suffix: linux-arm64
-          - os: macos-latest
-            goos: darwin
-            goarch: amd64
-            suffix: darwin-amd64
-          - os: macos-latest
-            goos: darwin
-            goarch: arm64
-            suffix: darwin-arm64
-          - os: windows-latest
-            goos: windows
-            goarch: amd64
-            suffix: windows-amd64
-
+  release:
+    runs-on: ubuntu-latest
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
@@ -57,16 +30,14 @@ jobs:
       uses: actions/setup-go@v5
       with:
         go-version: '1.24.4'
-        cache: true
 
-    - name: Update all Go dependencies
+    - name: Update dependencies
       run: |
         go get -u all
         go mod tidy
 
     - name: Get version
       id: version
-      shell: bash
       run: |
         if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
           echo "VERSION=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
@@ -74,168 +45,85 @@ jobs:
           echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
         fi
 
-    - name: Build binary
-      env:
-        GOOS: ${{ matrix.goos }}
-        GOARCH: ${{ matrix.goarch }}
-        CGO_ENABLED: 0
+    - name: Build all platforms
       run: |
         mkdir -p build
-        BINARY_NAME="github-profiler"
-        if [[ "${{ matrix.goos }}" == "windows" ]]; then
-          BINARY_NAME="${BINARY_NAME}.exe"
-        fi
+        VERSION="${{ steps.version.outputs.VERSION }}"
         
-        go build -v -ldflags="-s -w -X main.version=${{ steps.version.outputs.VERSION }}" \
-          -o "build/${BINARY_NAME}" .
+        # Linux AMD64
+        GOOS=linux GOARCH=amd64 go build -ldflags="-s -w -X main.version=$VERSION" -o build/github-profiler-linux-amd64 .
+        
+        # Linux ARM64
+        GOOS=linux GOARCH=arm64 go build -ldflags="-s -w -X main.version=$VERSION" -o build/github-profiler-linux-arm64 .
+        
+        # macOS AMD64
+        GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w -X main.version=$VERSION" -o build/github-profiler-darwin-amd64 .
+        
+        # macOS ARM64 (Apple Silicon)
+        GOOS=darwin GOARCH=arm64 go build -ldflags="-s -w -X main.version=$VERSION" -o build/github-profiler-darwin-arm64 .
+        
+        # Windows AMD64
+        GOOS=windows GOARCH=amd64 go build -ldflags="-s -w -X main.version=$VERSION" -o build/github-profiler-windows-amd64.exe .
 
-    - name: Sign binary (macOS)
-      if: matrix.os == 'macos-latest'
-      run: |
-        # Note: In production, you would use actual certificates
-        # codesign --sign "Developer ID Application: Your Name" build/github-profiler
-        echo "Binary built for macOS - code signing would happen here with proper certificates"
-
-    - name: Create archive (Unix)
-      if: matrix.goos != 'windows'
-      run: |
-        cd build
-        tar -czf "github-profiler-${{ steps.version.outputs.VERSION }}-${{ matrix.suffix }}.tar.gz" github-profiler
-        sha256sum "github-profiler-${{ steps.version.outputs.VERSION }}-${{ matrix.suffix }}.tar.gz" > "github-profiler-${{ steps.version.outputs.VERSION }}-${{ matrix.suffix }}.tar.gz.sha256"
-
-    - name: Create archive (Windows)
-      if: matrix.goos == 'windows'
+    - name: Create archives
       run: |
         cd build
-        7z a "github-profiler-${{ steps.version.outputs.VERSION }}-${{ matrix.suffix }}.zip" github-profiler.exe
-        certutil -hashfile "github-profiler-${{ steps.version.outputs.VERSION }}-${{ matrix.suffix }}.zip" SHA256 > "github-profiler-${{ steps.version.outputs.VERSION }}-${{ matrix.suffix }}.zip.sha256"
-
-    - name: Generate build attestation
-      uses: actions/attest-build-provenance@v1
-      with:
-        subject-path: 'build/github-profiler*'
-
-    - name: Upload artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: github-profiler-${{ matrix.suffix }}
-        path: build/github-profiler-${{ steps.version.outputs.VERSION }}-*
-        retention-days: 90
-
-  release:
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
-
-    - name: Get version
-      id: version
-      run: |
-        if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-          echo "VERSION=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
-        else
-          echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
-        fi
-
-    - name: Download all artifacts
-      uses: actions/download-artifact@v4
-      with:
-        path: artifacts
-
-    - name: Prepare release assets
-      run: |
-        mkdir -p release-assets
-        find artifacts -name "*.tar.gz" -o -name "*.zip" -o -name "*.sha256" | xargs -I {} cp {} release-assets/
-        ls -la release-assets/
-
-    - name: Generate comprehensive checksums
-      run: |
-        cd release-assets
+        VERSION="${{ steps.version.outputs.VERSION }}"
+        
+        # Create tar.gz for Unix systems
+        tar -czf github-profiler-$VERSION-linux-amd64.tar.gz github-profiler-linux-amd64
+        tar -czf github-profiler-$VERSION-linux-arm64.tar.gz github-profiler-linux-arm64
+        tar -czf github-profiler-$VERSION-darwin-amd64.tar.gz github-profiler-darwin-amd64
+        tar -czf github-profiler-$VERSION-darwin-arm64.tar.gz github-profiler-darwin-arm64
+        
+        # Create zip for Windows
+        zip github-profiler-$VERSION-windows-amd64.zip github-profiler-windows-amd64.exe
+        
+        # Generate checksums
         sha256sum *.tar.gz *.zip > SHA256SUMS
-        sha512sum *.tar.gz *.zip > SHA512SUMS
 
     - name: Generate release notes
-      id: release_notes
       run: |
-        # Get commits since last tag
+        VERSION="${{ steps.version.outputs.VERSION }}"
         LAST_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+        
         if [[ -n "$LAST_TAG" ]]; then
-          CHANGELOG=$(git log --pretty=format:"- %s (%h)" $LAST_TAG..HEAD)
+          CHANGELOG=$(git log --oneline $LAST_TAG..HEAD)
         else
-          CHANGELOG=$(git log --pretty=format:"- %s (%h)" -10)
+          CHANGELOG=$(git log --oneline -10)
         fi
         
-        # Create comprehensive release notes
         cat << EOF > RELEASE_NOTES.md
-        ## GitHub Profiler ${{ steps.version.outputs.VERSION }}
+        ## GitHub Profiler $VERSION
         
         Professional GitHub user analysis tool with interactive TUI.
         
-        ### What's New
+        ### Changes
         $CHANGELOG
         
-        ### Installation
+        ### Quick Install
         
-        #### Quick Install (Recommended)
+        **Linux/macOS:**
         \`\`\`bash
-        # Linux/macOS
-        curl -L "https://github.com/Typeflu/Temp/releases/download/${{ steps.version.outputs.VERSION }}/github-profiler-${{ steps.version.outputs.VERSION }}-\$(uname -s | tr '[:upper:]' '[:lower:]')-\$(uname -m | sed 's/x86_64/amd64/').tar.gz" | tar xz
-        sudo mv github-profiler /usr/local/bin/
-        
-        # Windows (PowerShell)
-        Invoke-WebRequest -Uri "https://github.com/Typeflu/Temp/releases/download/${{ steps.version.outputs.VERSION }}/github-profiler-${{ steps.version.outputs.VERSION }}-windows-amd64.zip" -OutFile "github-profiler.zip"
-        Expand-Archive github-profiler.zip
+        # Download and install
+        curl -L "https://github.com/Typeflu/Temp/releases/download/$VERSION/github-profiler-$VERSION-\$(uname -s | tr '[:upper:]' '[:lower:]')-\$(uname -m | sed 's/x86_64/amd64/').tar.gz" | tar xz
+        sudo mv github-profiler-* /usr/local/bin/github-profiler
         \`\`\`
         
-        #### Go Install
-        \`\`\`bash
-        go install github.com/Typeflu/Temp@${{ steps.version.outputs.VERSION }}
-        \`\`\`
+        **Windows:**
+        Download the zip file and extract to your PATH.
         
         ### Usage
         \`\`\`bash
-        # Interactive mode
-        github-profiler
-        
-        # Analyze specific user
-        github-profiler octocat
-        
-        # Demo mode
-        github-profiler demo
-        
-        # With GitHub token (recommended)
-        GITHUB_TOKEN=your_token github-profiler username
+        github-profiler          # Interactive mode
+        github-profiler octocat  # Analyze user
+        github-profiler demo     # Demo mode
         \`\`\`
         
         ### Verification
-        
-        All release binaries include cryptographic signatures and checksums:
-        
         \`\`\`bash
-        # Verify SHA256 checksums
         sha256sum -c SHA256SUMS
-        
-        # Verify SHA512 checksums  
-        sha512sum -c SHA512SUMS
         \`\`\`
-        
-        ### Build Information
-        - **Go Version**: 1.24.4
-        - **Dependencies**: Latest versions automatically updated
-        - **Platforms**: Linux (amd64/arm64), macOS (amd64/arm64), Windows (amd64)
-        - **Build Attestation**: GitHub Actions provenance included
-        
-        ### Architecture
-        - Professional TUI built with Bubble Tea
-        - Elm Architecture pattern for maintainable code
-        - Modern Go practices and latest dependencies
-        - Corporate-ready professional interface
-        
-        ---
-        **Full Changelog**: https://github.com/Typeflu/Temp/compare/$LAST_TAG...${{ steps.version.outputs.VERSION }}
         EOF
 
     - name: Create Release
@@ -244,23 +132,8 @@ jobs:
         tag_name: ${{ steps.version.outputs.VERSION }}
         name: "GitHub Profiler ${{ steps.version.outputs.VERSION }}"
         body_path: RELEASE_NOTES.md
-        files: |
-          release-assets/*
+        files: build/*
         prerelease: ${{ github.event.inputs.prerelease || false }}
         make_latest: ${{ !github.event.inputs.prerelease }}
-        generate_release_notes: false
-        discussion_category_name: "Releases"
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-    - name: Create latest symlinks (if stable release)
-      if: ${{ !github.event.inputs.prerelease }}
-      run: |
-        cd release-assets
-        
-        # Create latest symlinks for easy downloading
-        ln -sf "github-profiler-${{ steps.version.outputs.VERSION }}-linux-amd64.tar.gz" "github-profiler-latest-linux-amd64.tar.gz"
-        ln -sf "github-profiler-${{ steps.version.outputs.VERSION }}-linux-arm64.tar.gz" "github-profiler-latest-linux-arm64.tar.gz"
-        ln -sf "github-profiler-${{ steps.version.outputs.VERSION }}-darwin-amd64.tar.gz" "github-profiler-latest-darwin-amd64.tar.gz" 
-        ln -sf "github-profiler-${{ steps.version.outputs.VERSION }}-darwin-arm64.tar.gz" "github-profiler-latest-darwin-arm64.tar.gz"
-        ln -sf "github-profiler-${{ steps.version.outputs.VERSION }}-windows-amd64.zip" "github-profiler-latest-windows-amd64.zip"
