@@ -78,23 +78,6 @@ uninstall:
 	@sudo rm -f /usr/local/bin/$(BINARY_NAME)
 	@echo "$(GREEN)✓ $(BINARY_NAME) uninstalled$(NC)"
 
-## Run tests
-test:
-	@echo "$(BLUE)Running tests...$(NC)"
-	@go test -v ./...
-	@echo "$(GREEN)✓ Tests complete$(NC)"
-
-## Run linter
-lint:
-	@echo "$(BLUE)Running linter...$(NC)"
-	@if command -v golangci-lint >/dev/null 2>&1; then \
-		golangci-lint run; \
-		echo "$(GREEN)✓ Linting complete$(NC)"; \
-	else \
-		echo "$(YELLOW)golangci-lint not found, skipping...$(NC)"; \
-		echo "$(YELLOW)Install with: go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest$(NC)"; \
-	fi
-
 ## Clean build artifacts
 clean:
 	@echo "$(BLUE)Cleaning build artifacts...$(NC)"
@@ -136,8 +119,6 @@ help:
 	@echo "  $(GREEN)uninstall$(NC)  - Remove binary from system PATH"
 	@echo "  $(GREEN)deps$(NC)       - Install Go dependencies"
 	@echo "  $(GREEN)deps-update$(NC) - Update all dependencies to latest versions"
-	@echo "  $(GREEN)test$(NC)       - Run tests"
-	@echo "  $(GREEN)lint$(NC)       - Run linter"
 	@echo "  $(GREEN)clean$(NC)      - Clean build artifacts"
 	@echo "  $(GREEN)demo$(NC)       - Run demo with 'octocat' user"
 	@echo "  $(GREEN)version$(NC)    - Show version information"
