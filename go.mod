@@ -5,7 +5,7 @@ go 1.24.4
 require (
 	github.com/briandowns/spinner v1.23.2
 	github.com/charmbracelet/lipgloss v1.1.0
-	github.com/google/go-github/v56 v56.0.0
+	github.com/google/go-github/v73/github v73.0.0
 	github.com/olekukonko/tablewriter v0.0.5
 	github.com/spf13/cobra v1.9.1
 	golang.org/x/oauth2 v0.30.0
