@@ -5,7 +5,7 @@ A professional CLI tool for comprehensive GitHub user profile analysis with adva
 [![Build Status](https://img.shields.io/badge/Status-Production%20Ready-brightgreen)](https://github.com/Typeflu/Temp)
 [![Go Version](https://img.shields.io/badge/Go-1.24+-blue)](https://golang.org/)
 [![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
-[![GitHub Release](https://img.shields.io/github/release/Typeflu/Temp.svg)](https://github.com/Typeflu/Temp/releases)
+[![GitHub Release](https://img.shields.io/github/release/Typeflu/Temp.svg)](https://github.com/TypeFlu/Temp/releases/tag/v1.0.0)
 
 ## Overview
 
