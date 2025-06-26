@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/google/go-github/v56/github"
+	"github.com/google/go-github/v73/github"
 )
 
 func CreateMockUserData() *UserData {
