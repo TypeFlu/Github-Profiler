@@ -2,10 +2,10 @@
 
 A professional CLI tool for comprehensive GitHub user profile analysis with advanced statistics, visualizations, and developer rankings.
 
-[![Build Status](https://img.shields.io/badge/Status-Production%20Ready-brightgreen)](https://github.com/Typeflu/Temp)
+[![Build Status](https://img.shields.io/badge/Status-Production%20Ready-brightgreen)](https://github.com/Typeflu/Github-Profiler)
 [![Go Version](https://img.shields.io/badge/Go-1.24+-blue)](https://golang.org/)
 [![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
-[![GitHub Release](https://img.shields.io/github/release/Typeflu/Temp.svg)](https://github.com/TypeFlu/Temp/releases/latest)
+[![GitHub Release](https://img.shields.io/github/release/Typeflu/Github-Profiler.svg)](https://github.com/TypeFlu/Github-Profiler/releases/latest)
 
 ## Overview
 
